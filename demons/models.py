@@ -65,10 +65,6 @@ class QRCode(models.Model):
             self.qr_code_image.save(f'qr_code_{self.code_id}.png', File(buffer), save=False)
         super().save(*args, **kwargs)
 
-
-
-
-
 class BaseUser(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)

@@ -1,8 +1,55 @@
+# Imports - standard python modules
+from datetime import datetime, timedelta
+from io import BytesIO
+import csv
 
+# Imports - external packages. Pls install using 'pip install'
+from xhtml2pdf import pisa
+from pandas import DataFrame
+
+# Imports - Django modules
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.db.models import Q
+from django.http import HttpResponse
+from django.shortcuts import render, redirect
+from django.template.loader import get_template
+from django.utils import timezone
 
+# Imports - Custom Code
+from .models import Student, Employee, Attendance
+from .views import is_admin
 
-#Reports
+#helper methods: export methods
+def export_to_csv(data, filename="employee_attendance.csv"):
+    if not data:
+        print("No data to export.")
+        return
+
+    try:
+        with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = data[0].keys() if data else [] 
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+            writer.writeheader()
+            writer.writerows(data)
+
+        print(f"Data successfully exported to {filename}")
+    except Exception as e:
+        print(f"Error exporting to CSV: {e}")
+
+def export_to_excel(data, filename="employee_attendance.xlsx", sheet_name="Attendance"):
+    if not data:
+        print("No data to export.")
+        return
+
+    try:
+        df = DataFrame(data)
+        df.to_excel(filename, sheet_name=sheet_name, index=False)
+        print(f"Data successfully exported to {filename}, sheet '{sheet_name}'")
+    except Exception as e:
+        print(f"Error exporting to Excel: {e}")
+
+#Reports -- Excel/CSV
 @login_required
 @user_passes_test(is_admin)
 def attendance_report(request):
@@ -140,7 +187,7 @@ def attendance_report(request):
 
 @login_required
 @user_passes_test(is_admin)
-def generate_employee_pdf_report(request):
+def generate_employee_excel_report(request):
     # Get parameters from the request
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
@@ -182,30 +229,57 @@ def generate_employee_pdf_report(request):
             'time_out': attendance.check_out_timestamp.time() if attendance.check_out_timestamp else None
         })
 
-    context = {
-        'start_date': start_date,
-        'end_date': end_date,
-        'attendance_data': employee_attendance,
-        'employee_id': employee_id,
-    }
-
-    # Render the HTML template
-    template = get_template('employee_pdf_report.html')
-    html = template.render(context)
-
-    # Create a PDF
-    result = BytesIO()
-    pdf = pisa.pisaDocument(BytesIO(html.encode("UTF-8")), result)
-    
-    if not pdf.err:
-        response = HttpResponse(result.getvalue(), content_type='application/pdf')
-        response['Content-Disposition'] = f'inline; filename="employee_attendance_report_{start_date}_to_{end_date}.pdf"'
-        return response
-    return HttpResponse('Error Rendering PDF', status=400)
+    export_to_excel(employee_attendance)
 
 @login_required
 @user_passes_test(is_admin)
-def generate_pdf_report(request):
+def generate_employee_csv_report(request):
+    # Get parameters from the request
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    employee_id = request.GET.get('employee_id')
+
+    # Set default date range to last 7 days if not provided
+    if not start_date:
+        start_date = (timezone.now() - timedelta(days=7)).date()
+    else:
+        start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+
+    if not end_date:
+        end_date = timezone.now().date()
+    else:
+        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+
+    # Create datetime range for exact date filtering
+    start_datetime = timezone.make_aware(datetime.combine(start_date, datetime.min.time()))
+    end_datetime = timezone.make_aware(datetime.combine(end_date, datetime.max.time()))
+
+    # Base query for attendance data
+    attendance_data = Attendance.objects.filter(
+        check_in_timestamp__range=(start_datetime, end_datetime),
+        employee__isnull=False
+    ).select_related('employee')
+
+    # Filter by employee ID if provided
+    if employee_id:
+        attendance_data = attendance_data.filter(employee__employee_id=employee_id)
+
+    employee_attendance = []
+    for attendance in attendance_data:
+        employee_attendance.append({
+            'id_number': attendance.employee.employee_id,
+            'name': attendance.employee.name,
+            'department': attendance.employee.department,
+            'date': attendance.check_in_timestamp.date(),
+            'time_in': attendance.check_in_timestamp.time(),
+            'time_out': attendance.check_out_timestamp.time() if attendance.check_out_timestamp else None
+        })
+
+    export_to_csv(employee_attendance)
+
+@login_required
+@user_passes_test(is_admin)
+def generate_excel_report(request):
     # Get parameters from the request
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
