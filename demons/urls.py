@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from reports_views import generate_employee_csv_report, generate_employee_excel_report, generate_excel_report
 
 app_name = 'demons'
 
@@ -27,6 +28,10 @@ urlpatterns = [
     path('attendance-report/', views.attendance_report, name='attendance_report'),
     path('generate-pdf-report/', views.generate_pdf_report, name='generate_pdf_report'),
     path('generate_employee_pdf_report/', views.generate_employee_pdf_report, name='generate_employee_pdf_report'),
+
+    path('generate-excel-report/', generate_excel_report, name='generate_excel_report'),
+    path('generate_employee_excel_report/', generate_employee_excel_report, name='generate_employee_excel_report'),
+    path('generate_employee_csv_report/', generate_employee_csv_report, name='generate_employee_csv_report'),
     
     path('calendar-events/', views.calendar_events, name='calendar_events'),
     path('save-event/', views.save_event, name='save_event'),
